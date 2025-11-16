@@ -1,0 +1,15 @@
+pandas
+numpy
+plotly
+matplotlib
+seaborn
+jupyter
+notebook
+sentence-transformers
+faiss-cpu
+networkx
+python-louvain
+scikit-learn
+folium
+
+
