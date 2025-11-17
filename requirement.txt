@@ -11,5 +11,5 @@ networkx
 python-louvain
 scikit-learn
 folium
-
-
+xgboost
+holidays
