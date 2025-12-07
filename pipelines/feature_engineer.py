@@ -111,6 +111,19 @@ class FeatureEngineer:
         # Aggregate department counts by district
         dept_counts = df_dept.groupby("district_thai").size().reset_index(name="dept_count")
         
+        # 👉 พิมพ์ mapping ออกมาให้เอาไปใส่ใน app.py ได้
+        dept_count_map = dept_counts.set_index("district_thai")["dept_count"].to_dict()
+        print("\n=== Department count per district (district_thai -> dept_count) ===")
+        for d, c in dept_count_map.items():
+            print(f"'{d}': {c},")
+        print("==============================================================\n")
+        
+        # (ถ้าอยากเซฟเป็นไฟล์ก็ทำได้)
+        mapping_dir = os.path.join(os.path.dirname(TRAFFY_MERGED_PATH), "mappings")
+        os.makedirs(mapping_dir, exist_ok=True)
+        dept_counts.to_csv(os.path.join(mapping_dir, "dept_count_by_district.csv"), index=False)
+        print(f"Saved dept_count_by_district.csv to {mapping_dir}")
+        
         # Merge department counts into Traffy
         df_merged = pd.merge(
             df_merged,
@@ -122,6 +135,7 @@ class FeatureEngineer:
         
         print(f"Merged shape: {df_merged.shape}")
         return df_merged
+
 
     def finalize_features(self, df):
             """
@@ -174,7 +188,7 @@ class FeatureEngineer:
             print(f"Filtered invalid resolution_time: {before_rt} -> {df.shape[0]} rows")
     
             # Trim (10%–75%)
-            q_low, q_high = df["resolution_time"].quantile([0.10, 0.75])
+            q_low, q_high = df["resolution_time"].quantile([0.10, 0.70])
             before_trim = df.shape[0]
             df = df[(df["resolution_time"] >= q_low) & (df["resolution_time"] <= q_high)]
             print(

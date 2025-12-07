@@ -13,6 +13,59 @@ st.set_page_config(
     page_icon="🏙️",
     layout="wide"
 )
+dept_map={
+    'คลองสาน': 4,
+'คลองสามวา': 2,
+'คลองเตย': 5,
+'คันนายาว': 3,
+'จตุจักร': 38,
+'จอมทอง': 4,
+'ดอนเมือง': 3,
+'ดินแดง': 8,
+'ดุสิต': 9,
+'ตลิ่งชัน': 2,
+'ทวีวัฒนา': 2,
+'ทุ่งครุ': 3,
+'ธนบุรี': 8,
+'บางกอกน้อย': 4,
+'บางกอกใหญ่': 5,
+'บางกะปิ': 4,
+'บางขุนเทียน': 4,
+'บางคอแหลม': 2,
+'บางซื่อ': 5,
+'บางนา': 2,
+'บางบอน': 3,
+'บางพลัด': 7,
+'บางรัก': 4,
+'บางเขน': 3,
+'บางแค': 5,
+'บึงกุ่ม': 3,
+'ปทุมวัน': 9,
+'ประเวศ': 4,
+'ป้อมปราบศัตรูพ่าย': 9,
+'พญาไท': 9,
+'พระนคร': 16,
+'พระโขนง': 1,
+'ภาษีเจริญ': 3,
+'มีนบุรี': 3,
+'ยานนาวา': 3,
+'ราชเทวี': 10,
+'ราษฎร์บูรณะ': 3,
+'ลาดกระบัง': 6,
+'ลาดพร้าว': 2,
+'วังทองหลาง': 3,
+'วัฒนา': 4,
+'สวนหลวง': 2,
+'สะพานสูง': 1,
+'สัมพันธวงศ์': 3,
+'สาทร': 4,
+'สายไหม': 2,
+'หนองจอก': 6,
+'หนองแขม': 3,
+'หลักสี่': 8,
+'ห้วยขวาง': 6,
+}
+# ---------------- Type & District Maps ----------------
 type_clean_map = {
     "ถนน": 0,
     "ท่อระบายน้ำ": 1,
@@ -38,8 +91,15 @@ type_clean_map = {
     "ป้ายจราจร": 21,
     "สอบถาม": 22,
     "ห้องน้ำ": 23,
-    "PM2.5": 24
+    "PM2.5": 24,
 }
+# list ของ type สำหรับ UI + one-hot (เอา Unknown ด้วย / ถ้าไม่อยากใช้ก็กรองออกได้)
+TYPE_VALUES = list(type_clean_map.keys())
+
+# map: type value -> ชื่อคอลัมน์ one-hot ที่ใช้ในโมเดล
+# (ตรงกับตอน training: 'type_' + value แล้ว replace '.' เป็น '_')
+TYPE_COLUMN_NAMES = {t: f"type_{t}".replace(".", "_") for t in TYPE_VALUES}
+
 district_map = {
     "ราษฎร์บูรณะ": 0,
     "พระโขนง": 1,
@@ -116,7 +176,7 @@ district_map = {
     "บ้านโป่ง": 72,
     "ไทรน้อย": 73,
     "หาดใหญ่": 74,
-    "สันกำแพง": 75
+    "สันกำแพง": 75,
 }
 
 # ---------------- Bangkok districts ----------------
@@ -184,7 +244,6 @@ def get_spark_session():
 
 @st.cache_resource(show_spinner=False)
 def load_model():
-    from pyspark.ml import PipelineModel
     candidates = [
         "pipelines/models/gbt_spark_model"
     ]
@@ -242,7 +301,7 @@ with tab_viz:
         if not map_df.empty:
             map_df = map_df[["lon", "lat"]].copy()
 
-            MAX_POINTS = 50_000
+            MAX_POINTS = 20_000
             if len(map_df) > MAX_POINTS:
                 map_df = map_df.sample(MAX_POINTS, random_state=42)
 
@@ -335,9 +394,11 @@ with tab_pred:
                     "Organization",
                     value=f"เขต{district}",
                 )
+                # ✅ ให้เลือก type ครบทุกค่าใน type_clean_map
                 type_clean = st.selectbox(
                     "Type",
-                    ["ความสะอาด", "ทางเท้า", "แสงสว่าง", "ถนน", "น้ำท่วม", "อื่นๆ"],
+                    TYPE_VALUES,
+                    index=TYPE_VALUES.index("ถนน") if "ถนน" in TYPE_VALUES else 0,
                 )
                 timestamp = st.date_input(
                     "Date", value=pd.to_datetime("today")
@@ -379,40 +440,53 @@ with tab_pred:
             )
 
         if submitted:
-            # Prepare input row
-            timestamp_str = f"{timestamp} {hour}:00:00"
+            from pyspark.sql.functions import col as spark_col
 
+            # Prepare timestamp string
+            timestamp_str = f"{timestamp} {hour:02d}:00:00"
+
+            # district_code ตรงกับที่ใช้ใน training
+            district_code = district_map.get(district, district_map["Unknown"])
+
+            # ✅ dept_count ตาม mapping ของเขต (ถ้าไม่เจอให้เป็น 0.0)
+            dept_val = float(dept_map.get(district, 0.0))
+
+            # ---------- สร้าง dict base features ----------
             data = {
+                # cols ที่ใช้ใน training modeler.base_feature_cols
+                "coords": [f"{lon},{lat}"],  # จะโดน cast เป็น double แล้ว fillna(0)
+                "timestamp": [timestamp_str],
+                "count_reopen": [float(count_reopen)],
+                "comment_len": [float(comment_len)],
+                "lon": [float(lon)],
+                "lat": [float(lat)],
+                "pm25_avg": [float(pm25_avg)],
+                "pm10_avg": [float(pm10_avg)],
+                "dust_avg": [float(dust_avg)],
+                "rainfall_mm": [float(rainfall_mm)],
+                "has_rain": [1.0 if has_rain else 0.0],
+                "dept_count": [dept_val],              # 👈 ใช้ dept_map แล้ว
+                "district_code": [float(district_code)],
+                # cols extra ที่ไม่ใช้ แต่เก็บไว้เฉย ๆ ก็ไม่เป็นไร
                 "organization": [organization],
                 "type_clean": [type_clean],
                 "district": [district],
-                "coords": [f"{lon},{lat}"],
-                "timestamp": [timestamp_str],
-                "state": ["เสร็จสิ้น"],
-                "count_reopen": [count_reopen],
-                "last_activity": [timestamp_str],
-                "comment_len": [comment_len],
-                "lon": [lon],
-                "lat": [lat],
-                "pm25_avg": [pm25_avg],
-                "pm10_avg": [pm10_avg],
-                "dust_avg": [dust_avg],
-                "rainfall_mm": [rainfall_mm],
-                "has_rain": [str(has_rain).lower()],
-                "dept_count": [1],
             }
 
-            from pyspark.sql.functions import col as spark_col, lit
+            # ---------- ใส่ one-hot type_* ให้ครบทุกตัว ----------
+            for t in TYPE_VALUES:
+                col_name = TYPE_COLUMN_NAMES[t]  # เช่น 'type_PM2_5'
+                data[col_name] = [1.0 if t == type_clean else 0.0]
 
-            input_df = spark.createDataFrame(pd.DataFrame(data))
+            # สร้าง Spark DataFrame
+            pdf = pd.DataFrame(data)
+            input_df = spark.createDataFrame(pdf)
 
-            # numeric features used in training (before *_code columns)
-            feature_cols = [
+            # cast features เป็น double ให้ชัวร์
+            feature_cols_for_cast = [
                 "coords",
                 "timestamp",
-                "state",
                 "count_reopen",
-                "last_activity",
                 "comment_len",
                 "lon",
                 "lat",
@@ -422,41 +496,20 @@ with tab_pred:
                 "rainfall_mm",
                 "has_rain",
                 "dept_count",
-            ]
-            categorical_cols = ["organization", "type_clean", "district"]
+                "district_code",
+            ] + list(TYPE_COLUMN_NAMES.values())
 
-            select_exprs = []
-            for c in feature_cols:
-                if c in ["timestamp", "last_activity"]:
-                    select_exprs.append(
-                        spark_col(c).cast("timestamp").cast("double").alias(c)
-                    )
-                else:
-                    select_exprs.append(
-                        spark_col(c).cast("double").alias(c)
-                    )
+            for c in feature_cols_for_cast:
+                if c in input_df.columns:
+                    input_df = input_df.withColumn(c, spark_col(c).cast("double"))
 
-            for c in categorical_cols:
-                select_exprs.append(spark_col(c))
-
-            input_df = input_df.select(select_exprs)
+            # เติม 0 สำหรับ missing (เผื่ออนาคต)
             input_df = input_df.fillna(0)
-
-            # *** IMPORTANT ***
-            # Model was trained with organization_code, type_clean_code, district_code
-            # We don't have the original mapping here, so we just set them to 0.0
-            # so that the schema matches what the pipeline expects.
-            input_df = (
-                input_df
-                .withColumn("organization_code", lit(0.0))
-                .withColumn("type_clean_code", lit(0.0))
-                .withColumn("district_code", lit(0.0))
-            )
 
             try:
                 prediction = model.transform(input_df)
                 log_pred = prediction.select("prediction").collect()[0][0]
-                hours_pred = np.expm1(log_pred)
+                hours_pred = float(np.expm1(log_pred))
 
                 st.success(f"⏱️ Predicted Resolution Time: **{hours_pred:.2f} hours**")
                 if hours_pred > 24:
@@ -464,7 +517,11 @@ with tab_pred:
                         f"📅 That's approximately **{hours_pred/24:.1f} days**."
                     )
 
+                with st.expander("Debug input row"):
+                    st.write(pdf)
+
             except Exception as e:
                 st.error(f"Error during prediction: {e}")
                 with st.expander("Debug Info"):
                     st.write(data)
+

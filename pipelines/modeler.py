@@ -158,12 +158,13 @@ class Modeler:
         print("Evaluating model...")
         predictions = model.transform(test_data)
 
+        # แปลงกลับไปเป็นชั่วโมง: expm1(prediction_log)
         predictions = predictions.withColumn(
             "prediction_hours",
             expm1(col("prediction"))
         )
 
-        # metrics บน log scale
+        # ---------- metrics บน log scale ----------
         eval_rmse_log = RegressionEvaluator(
             labelCol="resolution_time_log",
             predictionCol="prediction",
@@ -184,7 +185,7 @@ class Modeler:
         mae_log = eval_mae_log.evaluate(predictions)
         r2_log = eval_r2_log.evaluate(predictions)
 
-        # metrics บน hour scale
+        # ---------- metrics บน hour scale ----------
         eval_rmse_hr = RegressionEvaluator(
             labelCol="resolution_time",
             predictionCol="prediction_hours",
@@ -201,19 +202,25 @@ class Modeler:
             metricName="r2",
         )
 
+        rmse_hr = eval_rmse_hr.evaluate(predictions)
+        mae_hr = eval_mae_hr.evaluate(predictions)
+        r2_hr = eval_r2_hr.evaluate(predictions)
+
+        # ---------- print results ----------
         print("\n=== Evaluation Metrics ===")
-        print(f"Log scale:")
+        print("Log scale:")
         print(f"  RMSE (log): {rmse_log:.4f}")
         print(f"  MAE  (log): {mae_log:.4f}")
         print(f"  R^2  (log): {r2_log:.4f}")
         print("")
-        print(f"Hour scale (resolution_time in hours):")
+        print("Hour scale (resolution_time in hours):")
         print(f"  RMSE (hours): {rmse_hr:.4f}")
         print(f"  MAE  (hours): {mae_hr:.4f}")
         print(f"  R^2  (hours): {r2_hr:.4f}")
         print("=====================================\n")
 
         return model
+
 
     # ------------------------------------------------------------------
     # 4) SAVE
