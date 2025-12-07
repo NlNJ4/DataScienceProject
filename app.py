@@ -330,6 +330,38 @@ with tab_viz:
                 )
             )
 
+        # ----- Scatter Mapbox -----
+        st.subheader("🗺️ Geospatial Distribution of Issues (Scatter)")
+        scatter_df = df.dropna(subset=["lat", "lon"])
+        
+        if not scatter_df.empty:
+            # Sample if too large
+            if len(scatter_df) > 5000:
+                scatter_df = scatter_df.sample(5000, random_state=42)
+            
+            # Prepare columns for hover
+            hover_cols = []
+            if "district" in scatter_df.columns: hover_cols.append("district")
+            if "comment" in scatter_df.columns: hover_cols.append("comment")
+            
+            color_col = "type_clean" if "type_clean" in scatter_df.columns else None
+
+            fig_scatter = px.scatter_mapbox(
+                scatter_df, 
+                lat="lat", 
+                lon="lon", 
+                color=color_col,
+                hover_name=color_col, 
+                hover_data=hover_cols,
+                zoom=10, 
+                height=600,
+                title='Geospatial Distribution of Issues (Sampled)'
+            )
+
+            fig_scatter.update_layout(mapbox_style="open-street-map")
+            fig_scatter.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
+            st.plotly_chart(fig_scatter, use_container_width=True)
+
         st.divider()
         c1, c2 = st.columns(2)
         with c1:
@@ -361,6 +393,38 @@ with tab_viz:
                 )
                 fig.update_layout(yaxis={"categoryorder": "total ascending"})
                 st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+        st.subheader("⏳ Resolution Time Distribution")
+        if "resolution_time" in df.columns:
+            fig_hist = px.histogram(
+                df,
+                x="resolution_time",
+                nbins=100,
+                title="Number of Tickets by Resolution Time Range",
+                labels={"resolution_time": "Resolution Time (Hours)"},
+                color_discrete_sequence=["#3366CC"],
+            )
+            fig_hist.update_layout(bargap=0.1, xaxis_title="Resolution Time (Hours)", yaxis_title="Number of Tickets")
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+        st.divider()
+        st.subheader("🐢 Average Resolution Time by District (Top 20)")
+        if "district" in df.columns and "resolution_time" in df.columns:
+            avg_df = df.groupby("district")["resolution_time"].mean().reset_index()
+            avg_df = avg_df.sort_values("resolution_time", ascending=False).head(20)
+            
+            fig_avg = px.bar(
+                avg_df,
+                x="district",
+                y="resolution_time",
+                color="resolution_time",
+                color_continuous_scale="Reds",
+                labels={"resolution_time": "Avg Hours", "district": "District"},
+                title="Districts with Longest Average Resolution Time"
+            )
+            st.plotly_chart(fig_avg, use_container_width=True)
+
     else:
         st.info("Data not found. Please run the data pipeline to generate the dataset.")
 

@@ -225,7 +225,7 @@ class Modeler:
     # ------------------------------------------------------------------
     # 4) SAVE
     # ------------------------------------------------------------------
-    def save_model(self, model, path="models/gbt_spark_model"):
+    def save_model(self, model, path="models/gbt_spark_model2"):
         if not os.path.exists("models"):
             os.makedirs("models", exist_ok=True)
 
