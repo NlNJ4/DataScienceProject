@@ -3,5 +3,5 @@ numpy
 plotly
 matplotlib
 seaborn
-xgboost
 streamlit
+pydeck

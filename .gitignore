@@ -14,12 +14,12 @@ ENV/
 env/
 env.bak/
 venv.bak/
-
+data/*
 # Environment (เก็บตัวอย่างไว้ได้)
 .env
 .env.*
 !.env.example
-
+models/*
 # Notebooks
 .ipynb_checkpoints/
 
@@ -40,9 +40,7 @@ htmlcov/
 *.log
 
 # Data & model artifacts (เก็บ placeholder ได้)
-data/*
 !data/.gitkeep
-models/*
 !models/.gitkeep
 reports/figures/*
 !reports/figures/.gitkeep

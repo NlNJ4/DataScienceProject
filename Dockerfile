@@ -1,7 +1,7 @@
 FROM jupyter/pyspark-notebook:latest
 
 # ลงแค่ของที่ต้องใช้เพิ่ม (อย่าแตะ pyspark เลย ให้ base image จัดการ)
-RUN pip install --no-cache-dir pyspark==3.5.0 streamlit xgboost
+RUN pip install --no-cache-dir pyspark==3.5.0 streamlit
 
 WORKDIR /home/jovyan/work
 
